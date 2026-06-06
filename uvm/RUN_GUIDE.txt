@@ -1,0 +1,284 @@
+================================================================================
+  HBM4 UVM Testbench — Complete QuestaSim Setup & Run Guide
+================================================================================
+
+DIRECTORY LAYOUT
+─────────────────────────────────────────────────────────────────────────────
+  hbm4_uvm_tb/
+  ├── RTL (place your design files here)
+  │   └── hbm4_bank_model.sv
+  │
+  ├── UVM Testbench
+  │   ├── hbm4_pkg.sv           ← Package (includes all TB files)
+  │   ├── hbm4_if.sv            ← Interface + assertions
+  │   ├── hbm4_item.sv          ← Sequence item
+  │   ├── hbm4_seq_lib.sv       ← All 12 sequences
+  │   ├── hbm4_driver.sv        ← UVM Driver
+  │   ├── hbm4_monitor.sv       ← UVM Monitor
+  │   ├── hbm4_agent.sv         ← UVM Agent
+  │   ├── hbm4_scoreboard.sv    ← Reference model + checker
+  │   ├── hbm4_coverage.sv      ← Functional coverage (13 covergroups)
+  │   ├── hbm4_env.sv           ← UVM Environment
+  │   ├── hbm4_test_lib.sv      ← 8 UVM Tests
+  │   └── tb_top.sv             ← Top-level module
+  │
+  └── Makefile                   ← Build + run automation
+
+
+PREREQUISITES
+─────────────────────────────────────────────────────────────────────────────
+  • QuestaSim 2021.1 or later  (or ModelSim with UVM support)
+  • UVM 1.2 library (ships with QuestaSim at $QUESTASIM_HOME/uvm-1.2)
+  • Set QUESTASIM_HOME environment variable, e.g.:
+      export QUESTASIM_HOME=/opt/questasim
+      export PATH=$QUESTASIM_HOME/bin:$PATH
+
+
+QUICK START (3 commands)
+─────────────────────────────────────────────────────────────────────────────
+
+  Step 1 — Compile
+  ────────────────
+  make compile
+
+  Step 2 — Run full regression (recommended for >90% coverage)
+  ─────────────────────────────────────────────────────────────
+  make sim TEST=hbm4_full_regression_test
+
+  Step 3 — View coverage
+  ──────────────────────
+  make cov
+
+
+MANUAL COMMANDS (without Makefile)
+─────────────────────────────────────────────────────────────────────────────
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ STEP 1 — Create library                                                  │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  vlib work
+  vmap work ./work
+
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ STEP 2 — Compile RTL                                                     │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  vlog -sv -timescale 1ns/1ps -work work \
+       hbm4_bank_model.sv
+
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ STEP 3 — Compile UVM Testbench                                           │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  vlog -sv -timescale 1ns/1ps -work work \
+       +incdir+. \
+       +incdir+$QUESTASIM_HOME/uvm-1.2/src \
+       $QUESTASIM_HOME/uvm-1.2/src/uvm_pkg.sv \
+       hbm4_if.sv \
+       hbm4_pkg.sv \
+       tb_top.sv
+
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ STEP 4a — Run (BATCH mode, recommended)                                  │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  # Full regression (hits all sequences → >90% coverage)
+  vsim -batch -work work tb_top \
+       +UVM_TESTNAME=hbm4_full_regression_test \
+       +UVM_VERBOSITY=UVM_MEDIUM \
+       -sv_seed random \
+       -coverage \
+       -cvgperinstance \
+       -do "coverage save -onexit hbm4_cov.ucdb; run -all; quit -f"
+
+  # Simple sanity test
+  vsim -batch -work work tb_top \
+       +UVM_TESTNAME=hbm4_simple_wr_rd_test \
+       +UVM_VERBOSITY=UVM_HIGH \
+       -sv_seed 12345 \
+       -do "run -all; quit -f"
+
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ STEP 4b — Run (GUI mode with waveforms)                                  │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  vsim -work work tb_top \
+       +UVM_TESTNAME=hbm4_full_regression_test \
+       +UVM_VERBOSITY=UVM_MEDIUM \
+       -sv_seed random \
+       -coverage \
+       -cvgperinstance
+
+  # In Questa Tcl console:
+  add wave -recursive /tb_top/dut/*
+  add wave -recursive /tb_top/dut_if/*
+  run -all
+
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ STEP 5 — Code coverage (toggle, branch, line, FSM)                       │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  # Add to vsim command:
+  vsim ... \
+       -coverage \
+       -cvgperinstance \
+       +cover+bcstf          # b=branch, c=cond, s=statement, t=toggle, f=fsm
+
+  # Save at end of simulation:
+  coverage save hbm4_cov.ucdb
+
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ STEP 6 — View / report coverage                                          │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  # HTML report (best for detailed drill-down)
+  vcover report -html -output cov_report hbm4_cov.ucdb
+
+  # Text report to stdout
+  vcover report hbm4_cov.ucdb
+
+  # Open in GUI
+  vsim -viewcov hbm4_cov.ucdb
+
+
+RUNNING INDIVIDUAL TESTS
+─────────────────────────────────────────────────────────────────────────────
+
+  TEST NAME                       DESCRIPTION
+  ──────────────────────────────────────────────────────────────────────────
+  hbm4_simple_wr_rd_test          Basic WRITE→READ round-trip sanity
+  hbm4_addr_sweep_test            All row[0:3] × col[0:3] + boundaries
+  hbm4_data_pattern_test          Walking 1/0s, alternating, all-0/all-1
+  hbm4_boundary_test              First/last row, first/last col
+  hbm4_dm_mask_test               DM mask = 00, 01, 10, 11
+  hbm4_random_test                200 fully random transactions
+  hbm4_stress_test                1000 random transactions (stress)
+  hbm4_full_regression_test       ALL of the above (max coverage)
+
+  Usage:
+    make sim TEST=hbm4_boundary_test
+    make sim TEST=hbm4_stress_test SEED=42
+
+  Manual:
+    vsim -batch -work work tb_top \
+         +UVM_TESTNAME=hbm4_boundary_test \
+         +UVM_VERBOSITY=UVM_MEDIUM \
+         -do "run -all; quit -f"
+
+
+FULL REGRESSION (all tests, merged coverage)
+─────────────────────────────────────────────────────────────────────────────
+
+  make regress
+
+  This will:
+    1. Run all 8 tests sequentially
+    2. Save individual .ucdb files
+    3. Merge all into merged.ucdb
+    4. Print pass/fail summary for each test
+
+
+EXPECTED LOG OUTPUT
+─────────────────────────────────────────────────────────────────────────────
+
+  # UVM_INFO logs from driver
+  UVM_INFO hbm4_driver.sv(73) @ 1450: uvm_test_top.env.agent.drv [DRV]
+    [WRITE] row=0x1 col=0x3 total_wr=1 total_rd=0
+
+  # Scoreboard logs
+  UVM_INFO hbm4_scoreboard.sv(65) @ 1850: uvm_test_top.env.scoreboard [SB]
+    [WRITE] b0 r1 c3 data=0x10000000 dm=00 ref→0x10000000
+  UVM_INFO hbm4_scoreboard.sv(86) @ 3200: uvm_test_top.env.scoreboard [SB]
+    [PASS] b0 r1 c3 got=0x10000000 exp=0x10000000
+
+  # Scoreboard summary
+  UVM_INFO hbm4_scoreboard.sv @ ...: [SB]
+    === SCOREBOARD SUMMARY ===
+    Total WRITEs : 650
+    Total READs  : 650
+    PASS count   : 650
+    FAIL count   : 0
+    RESULT       : *** TEST PASSED — Zero Mismatches ***
+
+  # Coverage summary
+  UVM_INFO hbm4_coverage.sv @ ...: [COV]
+    === FUNCTIONAL COVERAGE SUMMARY ===
+    cg_op              : 100.00%
+    cg_row             : 100.00%
+    cg_col             : 100.00%
+    cg_dm              : 100.00%
+    cg_data            : 93.75%
+    cg_cross_op_row    : 100.00%
+    cg_cross_op_col    : 100.00%
+    cg_cross_op_dm     : 100.00%
+    cg_cross_row_col   : 100.00%
+    cg_cross_op_row_col: 100.00%
+    cg_b2b             : 100.00%
+    TOTAL FUNCTIONAL   : 99.53%
+    Coverage target >=90% ACHIEVED
+
+  # Final test result
+  UVM_INFO @ ...: [TEST]
+    *** FINAL RESULT: TEST PASSED ***
+
+  UVM_INFO @ ...: Simulation PASSED
+
+
+TROUBLESHOOTING
+─────────────────────────────────────────────────────────────────────────────
+
+  ISSUE: "Cannot find uvm_pkg"
+  FIX:   Set UVM_HOME correctly in Makefile or verify path:
+           ls $QUESTASIM_HOME/uvm-1.2/src/uvm_pkg.sv
+
+  ISSUE: "Virtual interface not found"
+  FIX:   Ensure tb_top.sv has the config_db::set() call before run_test()
+         Check DQ_W parameter matches between pkg/interface/DUT
+
+  ISSUE: Assertion failures on DQ_NOT_X
+  FIX:   Check clk_2x phase alignment. clk_2x must start HIGH (=1) so its
+         first posedge at 2.5ns aligns with clk posedge at 5ns.
+
+  ISSUE: Scoreboard mismatches on rd_data
+  FIX:   Ensure monitor waits for done (not rd_valid) before sampling.
+         rd_valid fires 1 cycle before done; rd_data holds until done.
+
+  ISSUE: Coverage below 90%
+  FIX:   Run hbm4_full_regression_test (not individual tests).
+         For code coverage, ensure you pass -coverage +cover+bcstf to vsim.
+
+  ISSUE: "Randomization failed"
+  FIX:   Check constraint conflicts. The base constraints are loose;
+         if overriding, ensure they don't conflict with c_row_range etc.
+
+  ISSUE: Compilation error "unknown type hbm4_item in hbm4_seq_lib"
+  FIX:   The package includes files in order. Do not compile hbm4_seq_lib.sv
+         standalone — it's included inside hbm4_pkg.sv.
+
+
+COVERAGE CLOSURE TIPS
+─────────────────────────────────────────────────────────────────────────────
+
+  Code Coverage (line/branch/toggle/FSM):
+    • All FSM states hit by: directed_wr_rd + addr_sweep sequences
+    • tRCD branch: every transaction hits this (tRCD=7 cycles)
+    • tRP branch:  PRE state in every transaction
+    • Toggle coverage: stress_seq with 1000 random txns covers toggles
+    • To boost: add +cover+bcstf to vsim command
+
+  Functional Coverage:
+    • row_sweep_seq     → all 16 rows covered
+    • col_sweep_seq     → all 16 cols covered
+    • data_pattern_seq  → walking 1/0, alt patterns, all-0/all-1
+    • dm_mask_seq       → all 4 DM mask combinations
+    • b2b_seq           → all 4 consecutive op pairs (WR→WR, WR→RD, ...)
+    • boundary_seq      → corner address bins
+
+================================================================================

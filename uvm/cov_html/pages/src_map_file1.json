@@ -1,0 +1,6 @@
+var g_data = {'dummy':null,
+'3':'hbm4_bank_model.sv',
+'4':'hbm4_coverage.sv',
+'1':'hbm4_if.sv',
+'5':'hbm4_pkg.sv',
+'2':'tb_top.sv'};

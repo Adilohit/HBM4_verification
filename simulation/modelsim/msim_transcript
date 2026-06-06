@@ -1,0 +1,125 @@
+# Reading D:/18.1/18.1/modelsim_ase/tcl/vsim/pref.tcl
+# ERROR: No extended dataflow license exists
+# do hbm4_bank_model_run_msim_rtl_verilog.do
+# if {[file exists rtl_work]} {
+# 	vdel -lib rtl_work -all
+# }
+# vlib rtl_work
+# vmap work rtl_work
+# Model Technology ModelSim - Intel FPGA Edition vmap 10.5b Lib Mapping Utility 2016.10 Oct  5 2016
+# vmap work rtl_work 
+# Modifying D:/18.1/18.1/modelsim_ase/win32aloem/../modelsim.ini
+# 
+# vlog -sv -work work +incdir+D:/hbm4 {D:/hbm4/hbm4_bank_model.sv}
+# Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+# Start time: 19:24:26 on Apr 07,2026
+# vlog -reportprogress 300 -sv -work work "+incdir+D:/hbm4" D:/hbm4/hbm4_bank_model.sv 
+# -- Compiling module hbm4_bank_model
+# 
+# Top level modules:
+# 	hbm4_bank_model
+# End time: 19:24:26 on Apr 07,2026, Elapsed time: 0:00:00
+# Errors: 0, Warnings: 0
+# 
+# vlog -sv -work work +incdir+D:/hbm4 {D:/hbm4/hbm4_bank_model_tb.sv}
+# Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+# Start time: 19:24:26 on Apr 07,2026
+# vlog -reportprogress 300 -sv -work work "+incdir+D:/hbm4" D:/hbm4/hbm4_bank_model_tb.sv 
+# -- Compiling module hbm4_bank_model_tb
+# 
+# Top level modules:
+# 	hbm4_bank_model_tb
+# End time: 19:24:26 on Apr 07,2026, Elapsed time: 0:00:00
+# Errors: 0, Warnings: 0
+# 
+# vsim -t 1ps -L altera_ver -L lpm_ver -L sgate_ver -L altera_mf_ver -L altera_lnsim_ver -L cyclonev_ver -L cyclonev_hssi_ver -L cyclonev_pcie_hip_ver -L rtl_work -L work -voptargs="+acc"  hbm4_bank_model_tb
+# vsim -t 1ps -L altera_ver -L lpm_ver -L sgate_ver -L altera_mf_ver -L altera_lnsim_ver -L cyclonev_ver -L cyclonev_hssi_ver -L cyclonev_pcie_hip_ver -L rtl_work -L work -voptargs=""+acc"" hbm4_bank_model_tb 
+# Start time: 19:24:26 on Apr 07,2026
+# Loading sv_std.std
+# Loading work.hbm4_bank_model_tb
+# Loading work.hbm4_bank_model
+# ** Warning: (vsim-3017) D:/hbm4/hbm4_bank_model_tb.sv(44): [TFMPC] - Too few port connections. Expected 29, found 28.
+#    Time: 0 ps  Iteration: 0  Instance: /hbm4_bank_model_tb/dut File: D:/hbm4/hbm4_bank_model.sv
+# ** Warning: (vsim-3722) D:/hbm4/hbm4_bank_model_tb.sv(44): [TFMPC] - Missing connection for port 'rd_data'.
+# 
+# add wave *
+# ** Warning: (vsim-WLF-5000) WLF file currently in use: vsim.wlf
+#           File in use by: Admin  Hostname: ADITYA  ProcessID: 3076
+#           Attempting to use alternate WLF file "./wlft46js8a".
+# ** Warning: (vsim-WLF-5001) Could not open WLF file: vsim.wlf
+#           Using alternate file: ./wlft46js8a
+# view structure
+# .main_pane.structure.interior.cs.body.struct
+# view signals
+# .main_pane.objects.interior.cs.body.tree
+# run -all
+# [0]  CK_t ↓  C_fall=xxxx  (col addr)
+# 
+# ============================================================
+#   WRITE  row=0xa  col=0x5  (WL=4, BL=8)
+#   Expected JEDEC timing from col cmd (T0):
+#     WDQS preamble : T0 + 3 CK
+#     Data start    : T0 + 4 CK
+#     Data end      : T0 + 6 CK
+#     WDQS postamble: T0 + 7 CK
+# ============================================================
+# 
+# [90000]  CK_t ↓  R_fall=1011  (RA[3:2])
+# [95000]  CK_t ↑  R_rise=1011  (row cmd)
+# [175000]  CK_t ↑  C_rise=0001  (WRITE opcode)  ← T0
+# [180000]  CK_t ↓  C_fall=0101  (col addr)
+# [196000]  WDQS posedge #1  DQ=0x00000000  (T0+2.1 CK)
+# [199000]  WDQS negedge     DQ=0x00000000
+# [201000]  WDQS posedge #2  DQ=0x00000000  (T0+2.6 CK)
+# [204000]  WDQS negedge     DQ=0x00000000
+# [206000]  WDQS posedge #3  DQ=0xd0d00000  (T0+3.1 CK)
+# [209000]  WDQS negedge     DQ=0xd1d11111
+# [211000]  WDQS posedge #4  DQ=0xd2d22222  (T0+3.6 CK)
+# [214000]  WDQS negedge     DQ=0xd3d33333
+# [216000]  WDQS posedge #5  DQ=0xd4d44444  (T0+4.1 CK)
+# [219000]  WDQS negedge     DQ=0xd5d55555
+# [221000]  WDQS posedge #6  DQ=0xd6d66666  (T0+4.6 CK)
+# [224000]  WDQS negedge     DQ=0xd7d77777
+# [226000]  WDQS posedge #7  DQ=0x00000000  (T0+5.1 CK)
+# [229000]  WDQS negedge     DQ=0x00000000
+# [231000]  WDQS posedge #8  DQ=0x00000000  (T0+5.6 CK)
+# [234000]  WDQS negedge     DQ=0x00000000
+# [236000]  WDQS posedge #9  DQ=0x00000000  (T0+6.1 CK)
+# [236000]  WDQS negedge     DQ=0x00000000
+# 
+#   WDQS posedges total: 9  (expect 8: preamble=2 + data=4 + postamble=2)
+#   WRITE done.
+# 
+# ============================================================
+#   READ   row=0xa  col=0x5  (RL=6, BL=8)
+#   Expected JEDEC timing from col cmd (T0):
+#     RDQS preamble : T0 + 5 CK
+#     Data start    : T0 + 6 CK
+#     Data end      : T0 + 8 CK
+#     RDQS postamble: T0 + 9 CK
+# ============================================================
+# 
+# [450000]  CK_t ↓  R_fall=1011  (RA[3:2])
+# [455000]  CK_t ↑  R_rise=1011  (row cmd)
+# [535000]  CK_t ↑  C_rise=0101  (READ opcode)   ← T0
+# [540000]  CK_t ↓  C_fall=0101  (col addr)
+# 
+# --- Write/Read Round-trip Comparison ---
+#   Beat[0]  EXP=0xd0d00000  CAP=0xd0d00000  PASS
+#   Beat[1]  EXP=0xd1d11111  CAP=0xd1d11111  PASS
+#   Beat[2]  EXP=0xd2d22222  CAP=0xd2d22222  PASS
+#   Beat[3]  EXP=0xd3d33333  CAP=0xd3d33333  PASS
+#   Beat[4]  EXP=0xd4d44444  CAP=0xd4d44444  PASS
+#   Beat[5]  EXP=0xd5d55555  CAP=0xd5d55555  PASS
+#   Beat[6]  EXP=0xd6d66666  CAP=0xd6d66666  PASS
+#   Beat[7]  EXP=0xd7d77777  CAP=0xd7d77777  PASS
+# 
+# ============================================================
+#   RESULT:  ALL 8 BEATS PASSED
+# ============================================================
+# 
+# INFO: DQ bus idle after transaction.
+# ** Note: $finish    : D:/hbm4/hbm4_bank_model_tb.sv(240)
+#    Time: 820 ns  Iteration: 0  Instance: /hbm4_bank_model_tb
+# 1
+# Break in Module hbm4_bank_model_tb at D:/hbm4/hbm4_bank_model_tb.sv line 240

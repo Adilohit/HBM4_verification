@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HBM4 DUT — Signal Whitebox</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Orbitron:wght@400;700;900&display=swap');
+
+  :root {
+    --bg: #070b12;
+    --panel: #0d1520;
+    --border: #1a2d45;
+    --axi-col: #00e5ff;
+    --ctrl-col: #39ff6e;
+    --phy-col: #ff9f1c;
+    --dram-col: #bf5fff;
+    --clk-col: #ff3f6e;
+    --misc-col: #ffd700;
+    --text: #c8d8e8;
+    --dim: #4a6070;
+    --glow: 0 0 12px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .page { position: relative; z-index: 1; padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* Header */
+  .header { text-align: center; margin-bottom: 32px; }
+  .header h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: 2rem;
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    color: var(--axi-col);
+    text-shadow: var(--glow) var(--axi-col);
+    margin-bottom: 6px;
+  }
+  .header p { color: var(--dim); font-size: 1rem; letter-spacing: 0.1em; font-family: 'Share Tech Mono'; }
+
+  /* Legend */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    justify-content: center; margin-bottom: 28px;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--panel); border: 1px solid var(--border);
+    padding: 6px 14px; border-radius: 4px;
+    font-family: 'Share Tech Mono'; font-size: 0.75rem; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .legend-item:hover { transform: translateY(-2px); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Tab nav */
+  .tabs { display: flex; gap: 4px; margin-bottom: 24px; flex-wrap: wrap; }
+  .tab {
+    font-family: 'Share Tech Mono'; font-size: 0.8rem; letter-spacing: 0.08em;
+    padding: 8px 20px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--dim);
+    cursor: pointer; transition: all 0.2s; border-radius: 3px;
+  }
+  .tab.active, .tab:hover {
+    color: var(--axi-col); border-color: var(--axi-col);
+    box-shadow: inset 0 0 10px rgba(0,229,255,0.08);
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── ARCHITECTURE DIAGRAM ── */
+  .arch-diagram {
+    display: flex; flex-direction: column; align-items: center; gap: 0;
+  }
+
+  .arch-block {
+    width: 100%; max-width: 900px;
+    border: 1.5px solid; border-radius: 6px;
+    padding: 18px 24px; position: relative;
+    background: var(--panel);
+    transition: all 0.3s; cursor: pointer;
+  }
+  .arch-block:hover { transform: scale(1.01); }
+  .arch-block.axi-color  { border-color: var(--axi-col);  box-shadow: 0 0 20px rgba(0,229,255,0.15); }
+  .arch-block.ctrl-color { border-color: var(--ctrl-col); box-shadow: 0 0 20px rgba(57,255,110,0.15); }
+  .arch-block.phy-color  { border-color: var(--phy-col);  box-shadow: 0 0 20px rgba(255,159,28,0.15); }
+  .arch-block.dram-color { border-color: var(--dram-col); box-shadow: 0 0 20px rgba(191,95,255,0.15); }
+
+  .block-title {
+    font-family: 'Orbitron', monospace; font-weight: 700; font-size: 0.9rem;
+    letter-spacing: 0.1em; margin-bottom: 12px;
+  }
+  .axi-color  .block-title { color: var(--axi-col);  }
+  .ctrl-color .block-title { color: var(--ctrl-col); }
+  .phy-color  .block-title { color: var(--phy-col);  }
+  .dram-color .block-title { color: var(--dram-col); }
+
+  .block-signals {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+
+  .sig-pill {
+    font-family: 'Share Tech Mono'; font-size: 0.72rem;
+    padding: 4px 10px; border-radius: 3px; border: 1px solid;
+    cursor: pointer; transition: all 0.2s; position: relative;
+  }
+  .sig-pill:hover { transform: translateY(-2px); }
+  .sig-pill.axi  { border-color: var(--axi-col);  color: var(--axi-col);  background: rgba(0,229,255,0.06); }
+  .sig-pill.ctrl { border-color: var(--ctrl-col); color: var(--ctrl-col); background: rgba(57,255,110,0.06); }
+  .sig-pill.phy  { border-color: var(--phy-col);  color: var(--phy-col);  background: rgba(255,159,28,0.06); }
+  .sig-pill.dram { border-color: var(--dram-col); color: var(--dram-col); background: rgba(191,95,255,0.06); }
+  .sig-pill.clk  { border-color: var(--clk-col);  color: var(--clk-col);  background: rgba(255,63,110,0.06); }
+  .sig-pill.misc { border-color: var(--misc-col); color: var(--misc-col); background: rgba(255,215,0,0.06); }
+
+  /* Arrow connectors */
+  .connector {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 0; width: 100%; max-width: 900px; position: relative; padding: 4px 0;
+  }
+  .conn-line {
+    width: 2px; background: linear-gradient(to bottom, #1a3a5c, #2a5080);
+    position: relative;
+  }
+  .conn-signals {
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+    padding: 6px 16px; background: rgba(0,0,0,0.4);
+    border: 1px solid var(--border); border-radius: 4px;
+    font-family: 'Share Tech Mono'; font-size: 0.7rem;
+  }
+  .conn-arrow {
+    width: 0; height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 10px solid #2a5080;
+  }
+
+  /* ── SIGNAL TABLE ── */
+  .signal-table-wrap { overflow-x: auto; }
+  table {
+    width: 100%; border-collapse: collapse;
+    font-family: 'Share Tech Mono'; font-size: 0.78rem;
+  }
+  thead tr { background: rgba(0,229,255,0.07); }
+  th {
+    padding: 12px 16px; text-align: left;
+    font-family: 'Orbitron', monospace; font-size: 0.72rem;
+    letter-spacing: 0.08em; color: var(--axi-col);
+    border-bottom: 1px solid var(--axi-col);
+  }
+  td { padding: 9px 16px; border-bottom: 1px solid rgba(26,45,69,0.8); color: var(--text); }
+  tr:hover td { background: rgba(0,229,255,0.04); }
+  .dir-in  { color: var(--ctrl-col); }
+  .dir-out { color: var(--phy-col); }
+  .dir-bi  { color: var(--dram-col); }
+
+  /* ── FSM DIAGRAM ── */
+  .fsm-container {
+    display: flex; flex-wrap: wrap; gap: 24px;
+    justify-content: center; padding: 16px;
+  }
+  .fsm-wrap { flex: 1; min-width: 320px; }
+  .fsm-title {
+    font-family: 'Orbitron', monospace; font-size: 0.85rem;
+    text-align: center; margin-bottom: 16px; letter-spacing: 0.1em;
+  }
+  .fsm-states {
+    display: flex; flex-direction: column; align-items: center; gap: 0;
+  }
+  .fsm-state {
+    border: 2px solid; border-radius: 8px; padding: 12px 28px;
+    text-align: center; min-width: 200px; cursor: pointer;
+    transition: all 0.3s; position: relative;
+    background: var(--panel);
+  }
+  .fsm-state:hover { transform: scale(1.05); }
+  .fsm-state.s-idle  { border-color: var(--axi-col);  color: var(--axi-col);  }
+  .fsm-state.s-act   { border-color: var(--ctrl-col); color: var(--ctrl-col); }
+  .fsm-state.s-rw    { border-color: var(--phy-col);  color: var(--phy-col);  }
+  .fsm-state.s-pre   { border-color: var(--dram-col); color: var(--dram-col); }
+  .fsm-state.s-ref   { border-color: var(--clk-col);  color: var(--clk-col);  }
+  .fsm-state.s-err   { border-color: #ff3333; color: #ff3333; }
+  .fsm-state .sname  { font-family: 'Orbitron', monospace; font-weight: 700; font-size: 0.85rem; }
+  .fsm-state .scond  { font-size: 0.7rem; color: var(--dim); margin-top: 4px; font-family: 'Share Tech Mono'; }
+
+  .fsm-arrow {
+    display: flex; flex-direction: column; align-items: center; gap: 0;
+  }
+  .fsm-arrow-line { width: 2px; height: 24px; background: var(--border); }
+  .fsm-arrow-label {
+    font-family: 'Share Tech Mono'; font-size: 0.68rem; color: var(--dim);
+    padding: 2px 8px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 3px; white-space: nowrap;
+  }
+  .fsm-arrow-tip {
+    width: 0; height: 0;
+    border-left: 6px solid transparent; border-right: 6px solid transparent;
+    border-top: 8px solid var(--border);
+  }
+
+  /* Modal / tooltip */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--axi-col);
+    border-radius: 8px; padding: 28px; max-width: 480px; width: 90%;
+    box-shadow: 0 0 40px rgba(0,229,255,0.2);
+    font-family: 'Share Tech Mono'; font-size: 0.82rem;
+    position: relative;
+  }
+  .modal-title {
+    font-family: 'Orbitron', monospace; font-size: 1rem;
+    color: var(--axi-col); margin-bottom: 16px;
+  }
+  .modal-close {
+    position: absolute; top: 12px; right: 16px;
+    background: none; border: none; color: var(--dim);
+    font-size: 1.4rem; cursor: pointer;
+  }
+  .modal-close:hover { color: var(--axi-col); }
+  .modal-row { display: flex; gap: 12px; margin-bottom: 10px; }
+  .modal-label { color: var(--dim); min-width: 90px; }
+  .modal-val { color: var(--text); }
+
+  /* Section headers in signal table */
+  .section-row td {
+    font-family: 'Orbitron', monospace; font-size: 0.72rem;
+    letter-spacing: 0.1em; padding: 14px 16px 6px;
+    color: var(--dim); border-bottom: 1px solid var(--border);
+  }
+
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 3px;
+    font-size: 0.7rem; font-weight: 600;
+  }
+  .badge-req  { background: rgba(57,255,110,0.15);  color: var(--ctrl-col); }
+  .badge-opt  { background: rgba(255,159,28,0.15);  color: var(--phy-col); }
+  .badge-clk  { background: rgba(255,63,110,0.15);  color: var(--clk-col); }
+
+  .note-box {
+    border: 1px solid var(--border); border-left: 3px solid var(--axi-col);
+    background: rgba(0,229,255,0.04); padding: 12px 16px;
+    border-radius: 0 4px 4px 0; margin-bottom: 16px;
+    font-family: 'Share Tech Mono'; font-size: 0.78rem; color: var(--text);
+  }
+
+  /* Pulse animation for clk signals */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .sig-pill.clk { animation: pulse 1.2s infinite; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <h1>HBM4 DUT — SIGNAL WHITEBOX</h1>
+    <p>VERIFICATION INTERFACE REFERENCE  ·  UVM PROJECT</p>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--axi-col)"></div>AXI Interface</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--ctrl-col)"></div>HBM Controller</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--phy-col)"></div>PHY Layer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--dram-col)"></div>DRAM / Memory</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--clk-col)"></div>Clock / Reset</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--misc-col)"></div>ECC / Status</div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('arch')">ARCHITECTURE WHITEBOX</div>
+    <div class="tab" onclick="switchTab('signals')">SIGNAL REFERENCE TABLE</div>
+    <div class="tab" onclick="switchTab('fsm')">FSM STATE DIAGRAM</div>
+  </div>
+
+  <!-- TAB: Architecture -->
+  <div class="tab-content active" id="tab-arch">
+    <div class="arch-diagram">
+
+      <!-- Processor block -->
+      <div class="arch-block axi-color" onclick="openModal('processor')">
+        <div class="block-title">① PROCESSOR / INITIATOR (APU · GPU · CPU)</div>
+        <div class="block-signals">
+          <span class="sig-pill clk" onclick="openModal('clk');event.stopPropagation()">ACLK</span>
+          <span class="sig-pill clk" onclick="openModal('aresetn');event.stopPropagation()">ARESETn</span>
+          <span class="sig-pill axi">AWID[3:0]</span>
+          <span class="sig-pill axi">AWADDR[31:0]</span>
+          <span class="sig-pill axi">AWLEN[7:0]</span>
+          <span class="sig-pill axi">AWSIZE[2:0]</span>
+          <span class="sig-pill axi">AWBURST[1:0]</span>
+          <span class="sig-pill axi">AWVALID</span>
+          <span class="sig-pill axi">AWREADY</span>
+          <span class="sig-pill axi">WDATA[127:0]</span>
+          <span class="sig-pill axi">WSTRB[15:0]</span>
+          <span class="sig-pill axi">WLAST</span>
+          <span class="sig-pill axi">WVALID</span>
+          <span class="sig-pill axi">WREADY</span>
+          <span class="sig-pill axi">BID[3:0]</span>
+          <span class="sig-pill axi">BRESP[1:0]</span>
+          <span class="sig-pill axi">BVALID</span>
+          <span class="sig-pill axi">BREADY</span>
+          <span class="sig-pill axi">ARID[3:0]</span>
+          <span class="sig-pill axi">ARADDR[31:0]</span>
+          <span class="sig-pill axi">ARLEN[7:0]</span>
+          <span class="sig-pill axi">ARSIZE[2:0]</span>
+          <span class="sig-pill axi">ARBURST[1:0]</span>
+          <span class="sig-pill axi">ARVALID</span>
+          <span class="sig-pill axi">ARREADY</span>
+          <span class="sig-pill axi">RID[3:0]</span>
+          <span class="sig-pill axi">RDATA[127:0]</span>
+          <span class="sig-pill axi">RRESP[1:0]</span>
+          <span class="sig-pill axi">RLAST</span>
+          <span class="sig-pill axi">RVALID</span>
+          <span class="sig-pill axi">RREADY</span>
+        </div>
+      </div>
+
+      <!-- Connector: AXI bus -->
+      <div class="connector">
+        <div class="conn-line" style="height:18px"></div>
+        <div class="conn-signals">
+          <span style="color:var(--axi-col)">▼ AXI4 WRITE CHANNELS: AW · W · B</span>
+          &nbsp;&nbsp;
+          <span style="color:var(--axi-col)">▲▼ AXI4 READ CHANNELS: AR · R</span>
+        </div>
+        <div class="conn-line" style="height:18px"></div>
+        <div class="conn-arrow"></div>
+      </div>
+
+      <!-- HBM Controller block -->
+      <div class="arch-block ctrl-color" onclick="openModal('ctrl')">
+        <div class="block-title">② HBM MEMORY CONTROLLER (AXI→HBM CMD TRANSLATOR)</div>
+        <div class="block-signals">
+          <span class="sig-pill clk">ACLK</span>
+          <span class="sig-pill clk">ARESETn</span>
+          <span class="sig-pill ctrl">CMD[2:0]</span>
+          <span class="sig-pill ctrl">BANK[3:0]</span>
+          <span class="sig-pill ctrl">BANK_GROUP[1:0]</span>
+          <span class="sig-pill ctrl">ROW_ADDR[14:0]</span>
+          <span class="sig-pill ctrl">COL_ADDR[9:0]</span>
+          <span class="sig-pill ctrl">CMD_VALID</span>
+          <span class="sig-pill ctrl">CMD_READY</span>
+          <span class="sig-pill ctrl">REFRESH_REQ</span>
+          <span class="sig-pill ctrl">REFRESH_ACK</span>
+          <span class="sig-pill ctrl">BANK_OPEN[15:0]</span>
+          <span class="sig-pill ctrl">RD_DATA_VALID</span>
+          <span class="sig-pill ctrl">WR_DATA_MASK[15:0]</span>
+          <span class="sig-pill misc">ECC_EN</span>
+          <span class="sig-pill misc">ECC_ERR_CORR</span>
+          <span class="sig-pill misc">ECC_ERR_UNCORR</span>
+          <span class="sig-pill misc">PARITY_OUT</span>
+        </div>
+      </div>
+
+      <!-- Connector: HBM CMD bus -->
+      <div class="connector">
+        <div class="conn-line" style="height:18px"></div>
+        <div class="conn-signals">
+          <span style="color:var(--ctrl-col)">▼ HBM4 CMD: ACTIVATE · READ · WRITE · PRECHARGE · REFRESH · MRS</span>
+        </div>
+        <div class="conn-line" style="height:18px"></div>
+        <div class="conn-arrow"></div>
+      </div>
+
+      <!-- PHY block -->
+      <div class="arch-block phy-color" onclick="openModal('phy')">
+        <div class="block-title">③ HBM4 PHY (PHYSICAL INTERFACE LAYER)</div>
+        <div class="block-signals">
+          <span class="sig-pill clk">CK_t</span>
+          <span class="sig-pill clk">CK_c</span>
+          <span class="sig-pill clk">CKE</span>
+          <span class="sig-pill phy">CA[6:0]</span>
+          <span class="sig-pill phy">CS_n[3:0]</span>
+          <span class="sig-pill phy">DQ[127:0]</span>
+          <span class="sig-pill phy">DQS_t[7:0]</span>
+          <span class="sig-pill phy">DQS_c[7:0]</span>
+          <span class="sig-pill phy">DBI_n[15:0]</span>
+          <span class="sig-pill phy">RESET_n</span>
+          <span class="sig-pill phy">PHY_INIT_DONE</span>
+          <span class="sig-pill phy">PHY_TRAIN_DONE</span>
+          <span class="sig-pill phy">RD_EN</span>
+          <span class="sig-pill phy">WR_EN</span>
+          <span class="sig-pill phy">ODT_n</span>
+        </div>
+      </div>
+
+      <!-- Connector: TSV bumps -->
+      <div class="connector">
+        <div class="conn-line" style="height:18px"></div>
+        <div class="conn-signals">
+          <span style="color:var(--phy-col)">▼▲ TSV / MICROBUMPS  ·  DQ · DQS · CA · CK · CS</span>
+        </div>
+        <div class="conn-line" style="height:18px"></div>
+        <div class="conn-arrow"></div>
+      </div>
+
+      <!-- DRAM block -->
+      <div class="arch-block dram-color" onclick="openModal('dram')">
+        <div class="block-title">④ DRAM DIES + LOGIC DIE (MEMORY ARRAY)</div>
+        <div class="block-signals">
+          <span class="sig-pill dram">MEM_ARRAY[row][col]</span>
+          <span class="sig-pill dram">BANK_STATE[15:0]</span>
+          <span class="sig-pill dram">ACTIVE_ROW[14:0]</span>
+          <span class="sig-pill dram">tRCD_COUNT</span>
+          <span class="sig-pill dram">tCL_COUNT</span>
+          <span class="sig-pill dram">tRP_COUNT</span>
+          <span class="sig-pill dram">tRAS_COUNT</span>
+          <span class="sig-pill dram">BURST_COUNT[2:0]</span>
+          <span class="sig-pill dram">TEMP_SENSOR</span>
+          <span class="sig-pill misc">ECC_SYNDROME[7:0]</span>
+          <span class="sig-pill misc">ERR_ADDR[31:0]</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- TAB: Signal Table -->
+  <div class="tab-content" id="tab-signals">
+    <div class="note-box">
+      💡 This table lists all signals you need to declare in your SystemVerilog interface files. Signals marked REQUIRED are essential for basic DUT operation. Click any row for details.
+    </div>
+    <div class="signal-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>SIGNAL</th>
+            <th>WIDTH</th>
+            <th>DIR (DUT)</th>
+            <th>LAYER</th>
+            <th>TYPE</th>
+            <th>DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Clock / Reset -->
+          <tr class="section-row"><td colspan="6">── CLOCK &amp; RESET</td></tr>
+          <tr><td>ACLK</td><td>1</td><td class="dir-in">IN</td><td style="color:var(--clk-col)">SYSTEM</td><td><span class="badge badge-req">REQUIRED</span></td><td>AXI system clock</td></tr>
+          <tr><td>ARESETn</td><td>1</td><td class="dir-in">IN</td><td style="color:var(--clk-col)">SYSTEM</td><td><span class="badge badge-req">REQUIRED</span></td><td>Active-low synchronous reset</td></tr>
+          <tr><td>CK_t / CK_c</td><td>1+1</td><td class="dir-out">OUT</td><td style="color:var(--phy-col)">PHY</td><td><span class="badge badge-req">REQUIRED</span></td><td>Differential HBM4 clock to DRAM</td></tr>
+          <tr><td>CKE</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--phy-col)">PHY</td><td><span class="badge badge-req">REQUIRED</span></td><td>Clock enable — must be HIGH for operation</td></tr>
+
+          <!-- AXI Write Address -->
+          <tr class="section-row"><td colspan="6">── AXI4 WRITE ADDRESS CHANNEL (AW)</td></tr>
+          <tr><td>AWID[3:0]</td><td>4</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Write transaction ID</td></tr>
+          <tr><td>AWADDR[31:0]</td><td>32</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Write start address</td></tr>
+          <tr><td>AWLEN[7:0]</td><td>8</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Burst length = AWLEN+1 beats</td></tr>
+          <tr><td>AWSIZE[2:0]</td><td>3</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Beat size: 3'b100 = 16B</td></tr>
+          <tr><td>AWBURST[1:0]</td><td>2</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Burst type: 00=FIXED, 01=INCR, 10=WRAP</td></tr>
+          <tr><td>AWVALID</td><td>1</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Master drives valid address</td></tr>
+          <tr><td>AWREADY</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Slave ready to accept address</td></tr>
+
+          <!-- AXI Write Data -->
+          <tr class="section-row"><td colspan="6">── AXI4 WRITE DATA CHANNEL (W)</td></tr>
+          <tr><td>WDATA[127:0]</td><td>128</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Write data (16 bytes per beat)</td></tr>
+          <tr><td>WSTRB[15:0]</td><td>16</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Byte enable strobes</td></tr>
+          <tr><td>WLAST</td><td>1</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Last beat of write burst</td></tr>
+          <tr><td>WVALID</td><td>1</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Write data valid</td></tr>
+          <tr><td>WREADY</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Slave ready for write data</td></tr>
+
+          <!-- AXI Write Response -->
+          <tr class="section-row"><td colspan="6">── AXI4 WRITE RESPONSE CHANNEL (B)</td></tr>
+          <tr><td>BID[3:0]</td><td>4</td><td class="dir-out">OUT</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Matches AWID of completed transaction</td></tr>
+          <tr><td>BRESP[1:0]</td><td>2</td><td class="dir-out">OUT</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>00=OKAY, 10=SLVERR, 11=DECERR</td></tr>
+          <tr><td>BVALID</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Response valid from slave</td></tr>
+          <tr><td>BREADY</td><td>1</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Master accepts response</td></tr>
+
+          <!-- AXI Read Address -->
+          <tr class="section-row"><td colspan="6">── AXI4 READ ADDRESS CHANNEL (AR)</td></tr>
+          <tr><td>ARID[3:0]</td><td>4</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Read transaction ID</td></tr>
+          <tr><td>ARADDR[31:0]</td><td>32</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Read start address</td></tr>
+          <tr><td>ARLEN[7:0]</td><td>8</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Read burst length</td></tr>
+          <tr><td>ARSIZE[2:0]</td><td>3</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Beat size</td></tr>
+          <tr><td>ARBURST[1:0]</td><td>2</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Burst type</td></tr>
+          <tr><td>ARVALID</td><td>1</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Read address valid</td></tr>
+          <tr><td>ARREADY</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Slave ready for read address</td></tr>
+
+          <!-- AXI Read Data -->
+          <tr class="section-row"><td colspan="6">── AXI4 READ DATA CHANNEL (R)</td></tr>
+          <tr><td>RID[3:0]</td><td>4</td><td class="dir-out">OUT</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Matches ARID</td></tr>
+          <tr><td>RDATA[127:0]</td><td>128</td><td class="dir-out">OUT</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Read data returned to master</td></tr>
+          <tr><td>RRESP[1:0]</td><td>2</td><td class="dir-out">OUT</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Read response status</td></tr>
+          <tr><td>RLAST</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Last beat of read burst</td></tr>
+          <tr><td>RVALID</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Read data valid</td></tr>
+          <tr><td>RREADY</td><td>1</td><td class="dir-in">IN</td><td style="color:var(--axi-col)">AXI</td><td><span class="badge badge-req">REQUIRED</span></td><td>Master accepts read data</td></tr>
+
+          <!-- HBM CMD -->
+          <tr class="section-row"><td colspan="6">── HBM4 COMMAND INTERFACE</td></tr>
+          <tr><td>CMD[2:0]</td><td>3</td><td class="dir-out">OUT</td><td style="color:var(--ctrl-col)">CTRL</td><td><span class="badge badge-req">REQUIRED</span></td><td>000=NOP, 001=ACT, 010=RD, 011=WR, 100=PRE, 101=REF, 110=MRS</td></tr>
+          <tr><td>BANK[3:0]</td><td>4</td><td class="dir-out">OUT</td><td style="color:var(--ctrl-col)">CTRL</td><td><span class="badge badge-req">REQUIRED</span></td><td>Target bank (0–15)</td></tr>
+          <tr><td>BANK_GROUP[1:0]</td><td>2</td><td class="dir-out">OUT</td><td style="color:var(--ctrl-col)">CTRL</td><td><span class="badge badge-req">REQUIRED</span></td><td>Bank group (0–3)</td></tr>
+          <tr><td>ROW_ADDR[14:0]</td><td>15</td><td class="dir-out">OUT</td><td style="color:var(--ctrl-col)">CTRL</td><td><span class="badge badge-req">REQUIRED</span></td><td>Row address for ACTIVATE</td></tr>
+          <tr><td>COL_ADDR[9:0]</td><td>10</td><td class="dir-out">OUT</td><td style="color:var(--ctrl-col)">CTRL</td><td><span class="badge badge-req">REQUIRED</span></td><td>Column address for RD/WR</td></tr>
+          <tr><td>CMD_VALID</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--ctrl-col)">CTRL</td><td><span class="badge badge-req">REQUIRED</span></td><td>Command is valid this cycle</td></tr>
+          <tr><td>REFRESH_REQ</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--ctrl-col)">CTRL</td><td><span class="badge badge-opt">OPTIONAL</span></td><td>Controller requests refresh</td></tr>
+          <tr><td>REFRESH_ACK</td><td>1</td><td class="dir-in">IN</td><td style="color:var(--ctrl-col)">CTRL</td><td><span class="badge badge-opt">OPTIONAL</span></td><td>PHY acknowledges refresh</td></tr>
+          <tr><td>BANK_OPEN[15:0]</td><td>16</td><td class="dir-out">OUT</td><td style="color:var(--ctrl-col)">CTRL</td><td><span class="badge badge-opt">OPTIONAL</span></td><td>Bitmask: which banks have open rows</td></tr>
+
+          <!-- PHY -->
+          <tr class="section-row"><td colspan="6">── PHY INTERFACE</td></tr>
+          <tr><td>CA[6:0]</td><td>7</td><td class="dir-out">OUT</td><td style="color:var(--phy-col)">PHY</td><td><span class="badge badge-req">REQUIRED</span></td><td>HBM4 Command/Address bus to DRAM</td></tr>
+          <tr><td>CS_n[3:0]</td><td>4</td><td class="dir-out">OUT</td><td style="color:var(--phy-col)">PHY</td><td><span class="badge badge-req">REQUIRED</span></td><td>Chip select (active low, per pseudo-channel)</td></tr>
+          <tr><td>DQ[127:0]</td><td>128</td><td class="dir-bi">BIDIR</td><td style="color:var(--phy-col)">PHY</td><td><span class="badge badge-req">REQUIRED</span></td><td>Data bus (simplified from 2048 to 128-bit)</td></tr>
+          <tr><td>DQS_t/c[7:0]</td><td>8+8</td><td class="dir-bi">BIDIR</td><td style="color:var(--phy-col)">PHY</td><td><span class="badge badge-req">REQUIRED</span></td><td>Differential data strobe</td></tr>
+          <tr><td>RESET_n</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--phy-col)">PHY</td><td><span class="badge badge-req">REQUIRED</span></td><td>Active-low reset to DRAM die</td></tr>
+          <tr><td>PHY_INIT_DONE</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--phy-col)">PHY</td><td><span class="badge badge-opt">OPTIONAL</span></td><td>PHY initialization complete flag</td></tr>
+          <tr><td>DBI_n[15:0]</td><td>16</td><td class="dir-bi">BIDIR</td><td style="color:var(--phy-col)">PHY</td><td><span class="badge badge-opt">OPTIONAL</span></td><td>Data Bus Inversion (power reduction)</td></tr>
+          <tr><td>ODT_n</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--phy-col)">PHY</td><td><span class="badge badge-opt">OPTIONAL</span></td><td>On-die termination control</td></tr>
+
+          <!-- ECC/Status -->
+          <tr class="section-row"><td colspan="6">── ECC &amp; STATUS</td></tr>
+          <tr><td>ECC_EN</td><td>1</td><td class="dir-in">IN</td><td style="color:var(--misc-col)">STATUS</td><td><span class="badge badge-opt">OPTIONAL</span></td><td>Enable ECC checking</td></tr>
+          <tr><td>ECC_ERR_CORR</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--misc-col)">STATUS</td><td><span class="badge badge-opt">OPTIONAL</span></td><td>Single-bit error corrected</td></tr>
+          <tr><td>ECC_ERR_UNCORR</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--misc-col)">STATUS</td><td><span class="badge badge-opt">OPTIONAL</span></td><td>Multi-bit uncorrectable error</td></tr>
+          <tr><td>TEMP_ALERT_n</td><td>1</td><td class="dir-out">OUT</td><td style="color:var(--misc-col)">STATUS</td><td><span class="badge badge-opt">OPTIONAL</span></td><td>Temperature exceeded threshold</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB: FSM -->
+  <div class="tab-content" id="tab-fsm">
+    <div class="note-box">
+      💡 Two FSMs run in parallel inside the HBM4 controller. The <span style="color:var(--ctrl-col)">AXI FSM</span> handles the AXI handshake protocol. The <span style="color:var(--phy-col)">HBM CMD FSM</span> translates requests to DRAM commands with proper timing.
+    </div>
+    <div class="fsm-container">
+
+      <!-- AXI FSM -->
+      <div class="fsm-wrap">
+        <div class="fsm-title" style="color:var(--axi-col)">AXI SLAVE FSM</div>
+        <div class="fsm-states">
+
+          <div class="fsm-state s-idle">
+            <div class="sname">IDLE</div>
+            <div class="scond">AWVALID=0, ARVALID=0</div>
+          </div>
+          <div class="fsm-arrow">
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-label">AWVALID &amp; AWREADY → assert AWREADY</div>
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-tip"></div>
+          </div>
+
+          <div class="fsm-state s-act">
+            <div class="sname">ADDR_DECODE</div>
+            <div class="scond">Latch AWADDR, AWLEN, AWID → send to CMD FSM</div>
+          </div>
+          <div class="fsm-arrow">
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-label">Assert WREADY</div>
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-tip"></div>
+          </div>
+
+          <div class="fsm-state s-rw">
+            <div class="sname">DATA_PHASE</div>
+            <div class="scond">Accept WDATA beats until WLAST</div>
+          </div>
+          <div class="fsm-arrow">
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-label">WLAST & WVALID & WREADY</div>
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-tip"></div>
+          </div>
+
+          <div class="fsm-state s-pre">
+            <div class="sname">RESP_PHASE</div>
+            <div class="scond">Assert BVALID, drive BRESP/BID</div>
+          </div>
+          <div class="fsm-arrow">
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-label">BREADY → return to IDLE</div>
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-tip"></div>
+          </div>
+
+          <div class="fsm-state s-idle">
+            <div class="sname">IDLE</div>
+            <div class="scond">Ready for next transaction</div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- HBM CMD FSM -->
+      <div class="fsm-wrap">
+        <div class="fsm-title" style="color:var(--ctrl-col)">HBM CMD FSM (DRAM SIDE)</div>
+        <div class="fsm-states">
+
+          <div class="fsm-state s-idle">
+            <div class="sname">IDLE / INIT</div>
+            <div class="scond">PHY_INIT_DONE=0 → wait · RESET_n, CKE setup</div>
+          </div>
+          <div class="fsm-arrow">
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-label">PHY_INIT_DONE=1 &amp; request pending</div>
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-tip"></div>
+          </div>
+
+          <div class="fsm-state s-act">
+            <div class="sname">ACTIVATE</div>
+            <div class="scond">CMD=001, drive ROW_ADDR → wait tRCD cycles</div>
+          </div>
+          <div class="fsm-arrow">
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-label">tRCD elapsed</div>
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-tip"></div>
+          </div>
+
+          <div class="fsm-state s-rw">
+            <div class="sname">READ / WRITE</div>
+            <div class="scond">CMD=010/011, drive COL_ADDR · DQ valid · burst count</div>
+          </div>
+          <div class="fsm-arrow">
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-label">burst complete (tCL done for RD)</div>
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-tip"></div>
+          </div>
+
+          <div class="fsm-state s-pre">
+            <div class="sname">PRECHARGE</div>
+            <div class="scond">CMD=100 · wait tRP cycles · clear BANK_OPEN bit</div>
+          </div>
+          <div class="fsm-arrow">
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-label">tRP elapsed OR REFRESH_REQ</div>
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-tip"></div>
+          </div>
+
+          <div class="fsm-state s-ref">
+            <div class="sname">REFRESH</div>
+            <div class="scond">CMD=101 · all banks precharged · wait tRFC</div>
+          </div>
+          <div class="fsm-arrow">
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-label">tRFC elapsed → back to IDLE</div>
+            <div class="fsm-arrow-line"></div>
+            <div class="fsm-arrow-tip"></div>
+          </div>
+
+          <div class="fsm-state s-err">
+            <div class="sname">ERROR</div>
+            <div class="scond">Bad addr / timing violation → BRESP=SLVERR · ECC_ERR_UNCORR</div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Timing parameters reference -->
+    <div style="margin-top:32px">
+      <div style="font-family:'Orbitron',monospace;font-size:0.85rem;color:var(--phy-col);margin-bottom:12px;letter-spacing:0.1em">KEY TIMING PARAMETERS (use as counter thresholds in FSM)</div>
+      <div class="signal-table-wrap">
+        <table>
+          <thead><tr><th>PARAM</th><th>MEANING</th><th>TYPICAL VALUE</th><th>FSM TRANSITION</th></tr></thead>
+          <tbody>
+            <tr><td style="color:var(--ctrl-col)">tRCD</td><td>RAS to CAS delay (ACTIVATE → READ/WRITE)</td><td>12–14 ns</td><td>ACTIVATE → RW</td></tr>
+            <tr><td style="color:var(--ctrl-col)">tCL</td><td>CAS Latency (READ cmd → data valid)</td><td>14–16 cycles</td><td>RW → data output</td></tr>
+            <tr><td style="color:var(--ctrl-col)">tRP</td><td>Precharge time (PRECHARGE → ACTIVATE)</td><td>12–14 ns</td><td>PRECHARGE → IDLE</td></tr>
+            <tr><td style="color:var(--ctrl-col)">tRAS</td><td>Min row active time</td><td>32–35 ns</td><td>ACTIVATE → PRECHARGE</td></tr>
+            <tr><td style="color:var(--ctrl-col)">tRC</td><td>Row cycle time = tRAS + tRP</td><td>45–50 ns</td><td>Full bank cycle</td></tr>
+            <tr><td style="color:var(--ctrl-col)">tRFC</td><td>Refresh cycle time</td><td>350–550 ns</td><td>REFRESH → IDLE</td></tr>
+            <tr><td style="color:var(--ctrl-col)">tREFI</td><td>Refresh interval</td><td>3.9 µs</td><td>Trigger REFRESH_REQ</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title" id="modal-title">Signal Info</div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+  function switchTab(id) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('tab-' + id).classList.add('active');
+    event.target.classList.add('active');
+  }
+
+  const modalData = {
+    processor: {
+      title: '① PROCESSOR / INITIATOR',
+      body: `<div class="modal-row"><span class="modal-label">Role:</span><span class="modal-val">AXI4 Master — initiates all read/write transactions</span></div>
+             <div class="modal-row"><span class="modal-label">In UVM:</span><span class="modal-val">This is your AXI Agent (active). The Driver mimics this block.</span></div>
+             <div class="modal-row"><span class="modal-label">Key rule:</span><span class="modal-val">VALID must not be deasserted before READY handshake completes</span></div>
+             <div class="modal-row"><span class="modal-label">UVM file:</span><span class="modal-val">axi_driver.sv, axi_sequencer.sv</span></div>`
+    },
+    ctrl: {
+      title: '② HBM MEMORY CONTROLLER',
+      body: `<div class="modal-row"><span class="modal-label">Role:</span><span class="modal-val">Translates AXI bursts into HBM4 DRAM commands with correct timing</span></div>
+             <div class="modal-row"><span class="modal-label">Contains:</span><span class="modal-val">Address decoder, Bank scheduler, Refresh timer, CMD FSM</span></div>
+             <div class="modal-row"><span class="modal-label">In UVM:</span><span class="modal-val">This is the DUT (P1 builds this)</span></div>
+             <div class="modal-row"><span class="modal-label">UVM file:</span><span class="modal-val">hbm4_dut.sv</span></div>`
+    },
+    phy: {
+      title: '③ HBM4 PHY',
+      body: `<div class="modal-row"><span class="modal-label">Role:</span><span class="modal-val">Physical layer — handles differential signaling, DQ/DQS, timing calibration</span></div>
+             <div class="modal-row"><span class="modal-label">Simplify:</span><span class="modal-val">For UVM project, abstract the PHY as a simple pass-through. No DLL modelling needed.</span></div>
+             <div class="modal-row"><span class="modal-label">In UVM:</span><span class="modal-val">Passive HBM monitor observes CA/CS/DQ here</span></div>
+             <div class="modal-row"><span class="modal-label">UVM file:</span><span class="modal-val">hbm_monitor.sv</span></div>`
+    },
+    dram: {
+      title: '④ DRAM DIES + LOGIC DIE',
+      body: `<div class="modal-row"><span class="modal-label">Role:</span><span class="modal-val">Actual memory storage — 3D stacked dies with TSV interconnect</span></div>
+             <div class="modal-row"><span class="modal-label">Simplify:</span><span class="modal-val">Use SystemVerilog associative array: logic [127:0] mem [longint unsigned]</span></div>
+             <div class="modal-row"><span class="modal-label">In UVM:</span><span class="modal-val">This is your reference model (P3 builds this)</span></div>
+             <div class="modal-row"><span class="modal-label">UVM file:</span><span class="modal-val">ref_model.sv, scoreboard.sv</span></div>`
+    },
+    clk: {
+      title: 'ACLK — System Clock',
+      body: `<div class="modal-row"><span class="modal-label">Width:</span><span class="modal-val">1-bit</span></div>
+             <div class="modal-row"><span class="modal-label">Direction:</span><span class="modal-val">Input to DUT</span></div>
+             <div class="modal-row"><span class="modal-label">Note:</span><span class="modal-val">All AXI signals sampled on rising edge. Typical: 200–800 MHz</span></div>
+             <div class="modal-row"><span class="modal-label">SVA:</span><span class="modal-val">@(posedge ACLK) — use for all assertion clocking</span></div>`
+    },
+    aresetn: {
+      title: 'ARESETn — Active-Low Reset',
+      body: `<div class="modal-row"><span class="modal-label">Width:</span><span class="modal-val">1-bit</span></div>
+             <div class="modal-row"><span class="modal-label">Type:</span><span class="modal-val">Synchronous, active LOW</span></div>
+             <div class="modal-row"><span class="modal-label">Behavior:</span><span class="modal-val">All state machines return to IDLE. All outputs deasserted.</span></div>
+             <div class="modal-row"><span class="modal-label">SVA:</span><span class="modal-val">disable iff (!ARESETn) — add to all assertions</span></div>`
+    }
+  };
+
+  function openModal(key) {
+    const d = modalData[key];
+    if (!d) return;
+    document.getElementById('modal-title').textContent = d.title;
+    document.getElementById('modal-body').innerHTML = d.body;
+    document.getElementById('modal').classList.add('open');
+  }
+  function closeModal() {
+    document.getElementById('modal').classList.remove('open');
+  }
+</script>
+</body>
+</html>

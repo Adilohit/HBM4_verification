@@ -1,0 +1,48 @@
+var g_data = {
+f7:{
+scopes:[{link:'z.htm?f=0&s=7',val:'work.hbm4_bank_model'}]
+,FSMs:[{dummy:0}
+,{anchor:'cvg77',items:[{c:'G',p:'100.00',z:'state'}
+,{cr:'c',s:'1',z:'S_IDLE',h:'4404',c:'g'}
+,{cr:'c',z:'S_IDLE -&gt; S_ACT_CMD',h:'1466',c:'g'}
+,{cr:'c',s:'1',z:'S_ACT_CMD',h:'2932',c:'g'}
+,{cr:'c',z:'S_ACT_CMD -&gt; S_tRCD',h:'1466',c:'g'}
+,{cr:'c',s:'1',z:'S_tRCD',h:'10262',c:'g'}
+,{cr:'c',z:'S_tRCD -&gt; S_COL_CMD',h:'1466',c:'g'}
+,{cr:'c',s:'1',z:'S_COL_CMD',h:'1466',c:'g'}
+,{cr:'c',z:'S_COL_CMD -&gt; S_DATA',h:'1466',c:'g'}
+,{cr:'c',s:'1',z:'S_DATA',h:'17592',c:'g'}
+,{cr:'c',z:'S_DATA -&gt; S_PRE',h:'1466',c:'g'}
+,{cr:'c',s:'1',z:'S_PRE',h:'10262',c:'g'}
+,{cr:'c',z:'S_PRE -&gt; S_DONE',h:'1466',c:'g'}
+,{cr:'c',s:'1',z:'S_DONE',h:'1466',c:'g'}
+,{cr:'c',z:'S_DONE -&gt; S_IDLE',h:'1466',c:'g'}
+]}
+
+],
+},
+f23:{
+scopes:[{s:'9',b:'1',val:'tb_top'},{link:'z.htm?f=0&s=23',val:'dut'}]
+,FSMs:[{dummy:0}
+,{anchor:'cvg77',items:[{c:'G',p:'100.00',z:'state'}
+,{cr:'c',s:'1',z:'S_IDLE',h:'4404',c:'g'}
+,{cr:'c',z:'S_IDLE -&gt; S_ACT_CMD',h:'1466',c:'g'}
+,{cr:'c',s:'1',z:'S_ACT_CMD',h:'2932',c:'g'}
+,{cr:'c',z:'S_ACT_CMD -&gt; S_tRCD',h:'1466',c:'g'}
+,{cr:'c',s:'1',z:'S_tRCD',h:'10262',c:'g'}
+,{cr:'c',z:'S_tRCD -&gt; S_COL_CMD',h:'1466',c:'g'}
+,{cr:'c',s:'1',z:'S_COL_CMD',h:'1466',c:'g'}
+,{cr:'c',z:'S_COL_CMD -&gt; S_DATA',h:'1466',c:'g'}
+,{cr:'c',s:'1',z:'S_DATA',h:'17592',c:'g'}
+,{cr:'c',z:'S_DATA -&gt; S_PRE',h:'1466',c:'g'}
+,{cr:'c',s:'1',z:'S_PRE',h:'10262',c:'g'}
+,{cr:'c',z:'S_PRE -&gt; S_DONE',h:'1466',c:'g'}
+,{cr:'c',s:'1',z:'S_DONE',h:'1466',c:'g'}
+,{cr:'c',z:'S_DONE -&gt; S_IDLE',h:'1466',c:'g'}
+]}
+
+],
+},
+dummyEnd:0
+};
+processFsmData(g_data);

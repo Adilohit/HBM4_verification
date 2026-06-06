@@ -1,0 +1,6 @@
+-html
+-htmldir
+./cov_html
+-details
+-verbose
+hbm4_cov.ucdb

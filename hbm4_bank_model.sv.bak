@@ -1,0 +1,311 @@
+//=============================================================
+// hbm4_bank_model.v
+//
+// DRAM-side bank model — decodes opcodes from the shared
+// command/address bus and reacts accordingly.
+//
+//   ┌───────────────────────┐       ┌────────────────────────┐
+//   │  Host Controller      │       │  DRAM Bank (this)       │
+//   │  (testbench)          │       │                         │
+//   │                       │ R/C   │  ┌─────────────────┐    │
+//   │  Drives opcodes ──────┼──────►│  │ Command Decoder  │    │
+//   │  on R_rise/R_fall     │ bus   │  │ ACT/WR/RD/PRE   │    │
+//   │     C_rise/C_fall     │       │  │ + addr extract   │    │
+//   │                       │       │  └────────┬────────┘    │
+//   │                       │       │      ┌────▼────────┐    │
+//   │                       │       │      │ Bank FSM     │    │
+//   │                       │       │      │ (Figure 3)   │    │
+//   │                       │       │      └────┬────────┘    │
+//   │                       │ DQ    │      ┌────▼────────┐    │
+//   │                       │◄──────┼──────│ Data Path    │    │
+//   │                       │ RDQS  │      │ DDR @ 2×CK   │    │
+//   │                       │◄──────┼──────│              │    │
+//   │                       │ WDQS  │      └─────────────┘    │
+//   └───────────────────────┘       └────────────────────────┘
+//
+// Opcode encoding (from JESD270-4A):
+//   ACT  : R_rise[2:0] = 3'b110
+//   PRE  : R_rise[2:0] = 3'b001
+//   WRITE: C_rise[3:0] = 4'b0001
+//   READ : C_rise[3:0] = 4'b0101
+//   NOP  : all zeros
+//=============================================================
+module hbm4_bank_model #(
+    parameter WL   = 4,
+    parameter RL   = 6,
+    parameter BL   = 8,
+    parameter tRCD = 7,
+    parameter tWTR = 4,
+    parameter tWR  = 6,
+    parameter tRTP = 4,
+    parameter tRP  = 7,
+    parameter DQ_W = 32
+)(
+    input  wire clk,
+    input  wire clk_2x,
+    input  wire rst_n,
+
+    // Shared command / address bus (ACTIVE-LOW = don't care on idle)
+    input  wire [3:0] R_rise,      // sampled at posedge CK
+    input  wire [3:0] R_fall,      // sampled at negedge CK
+    input  wire [3:0] C_rise,      // sampled at posedge CK
+    input  wire [3:0] C_fall,      // sampled at negedge CK
+
+    // Read data from memory array (sim model pre-loads)
+    input  wire [DQ_W-1:0] mem_d0, mem_d1, mem_d2, mem_d3,
+    input  wire [DQ_W-1:0] mem_d4, mem_d5, mem_d6, mem_d7,
+
+    // Strobe outputs
+    output wire WDQS_t, WDQS_c,
+    output wire RDQS_t, RDQS_c,
+
+    // Data bus
+    output wire [DQ_W-1:0] DQ,
+
+    // Status
+    output wire act_ready,
+    output wire wr_ready,
+    output wire rd_ready,
+    output wire pre_ready,
+    output reg  rd_valid,
+    output wire [2:0] bank_state
+);
+
+    //=========================================================
+    // Command decoder (combinational from bus)
+    //=========================================================
+    wire cmd_act_dec = (R_rise[2:0] == 3'b110);     // ACT opcode
+    wire cmd_pre_dec = (R_rise[2:0] == 3'b001);     // PRE opcode
+    wire cmd_wr_dec  = (C_rise      == 4'b0001);    // WRITE opcode
+    wire cmd_rd_dec  = (C_rise      == 4'b0101);    // READ opcode
+
+    //=========================================================
+    // Negedge latch: capture R_fall / C_fall for address
+    //=========================================================
+    reg [3:0] r_fall_lat, c_fall_lat;
+
+    always @(negedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            r_fall_lat <= 4'h0;
+            c_fall_lat <= 4'h0;
+        end else begin
+            r_fall_lat <= R_fall;
+            c_fall_lat <= C_fall;
+        end
+    end
+
+    //=========================================================
+    // FSM states (Figure 3)
+    //=========================================================
+    localparam S_IDLE   = 3'd0,
+               S_ACT    = 3'd1,     // Activating (tRCD wait)
+               S_ACTIVE = 3'd2,     // Bank Active
+               S_WRITE  = 3'd3,     // Writing
+               S_READ   = 3'd4,     // Reading
+               S_PRE    = 3'd5;     // Precharging
+
+    reg [2:0] state, nxt;
+    reg [5:0] cyc;
+
+    assign bank_state = state;
+
+    //=========================================================
+    // Timing
+    //=========================================================
+    localparam DATA_CK = BL / 4;
+
+    // Internal latency offsets: bus cmd is decoded at posedge N,
+    // FSM enters new state at posedge N (via NBA), cyc=0 at N+1.
+    // Data must appear at posedge N+WL (from bus), = cyc WL-1.
+    localparam WL_INT = WL - 1;
+    localparam RL_INT = RL - 1;
+
+    //=========================================================
+    // Recovery timers
+    //=========================================================
+    reg [5:0] wtr_cnt;
+    reg [5:0] wr_cnt;
+    reg [5:0] rtp_cnt;
+
+    //=========================================================
+    // Ready signals
+    //=========================================================
+    assign act_ready = (state == S_IDLE);
+    assign wr_ready  = (state == S_ACTIVE);
+    assign rd_ready  = (state == S_ACTIVE) && (wtr_cnt <= 1);
+    assign pre_ready = (state == S_ACTIVE) && (wr_cnt  <= 1)
+                                           && (rtp_cnt <= 1);
+
+    //=========================================================
+    // Address registers
+    //=========================================================
+    reg [3:0] ra, ca;
+
+    // Row address: captured across ACT's 1.5 CK
+    //   posedge N:   ACT decoded (state → S_ACT)
+    //   negedge N:   R_fall = {RA[3:2], 2'b11} → r_fall_lat
+    //   posedge N+1: R_rise = {RA[1:0], 2'b11} → capture both
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            ra <= 4'd0;
+        end else if (state == S_ACT && cyc == 0) begin
+            ra[3:2] <= r_fall_lat[3:2];
+            ra[1:0] <= R_rise[3:2];
+        end
+    end
+
+    // Column address: captured from C_fall on negedge after WR/RD
+    //   posedge N:   WR/RD decoded (state → S_WRITE/S_READ)
+    //   negedge N:   C_fall = CAa → c_fall_lat
+    //   posedge N+1: capture (cyc == 0 in S_WRITE/S_READ)
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            ca <= 4'd0;
+        end else if ((state == S_WRITE || state == S_READ) && cyc == 0) begin
+            ca <= c_fall_lat;
+        end
+    end
+
+    //=========================================================
+    // Burst data latch
+    //=========================================================
+    reg [DQ_W-1:0] burst [0:7];
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            burst[0]<=0; burst[1]<=0; burst[2]<=0; burst[3]<=0;
+            burst[4]<=0; burst[5]<=0; burst[6]<=0; burst[7]<=0;
+        end
+        // Latch mem data when entering WRITE or READ
+        // (in a real DRAM, write data comes from DQ; read data from array.
+        //  For this model, both come from mem_d* inputs.)
+        else if ((state == S_WRITE || state == S_READ) && cyc == 0) begin
+            burst[0]<=mem_d0; burst[1]<=mem_d1;
+            burst[2]<=mem_d2; burst[3]<=mem_d3;
+            burst[4]<=mem_d4; burst[5]<=mem_d5;
+            burst[6]<=mem_d6; burst[7]<=mem_d7;
+        end
+    end
+
+    //=========================================================
+    // Strobe / data enable windows
+    //=========================================================
+    wire wdqs_en = (state == S_WRITE) &&
+                   (cyc >= (WL_INT - 1)) &&
+                   (cyc <  (WL_INT + DATA_CK));
+
+    wire rdqs_en = (state == S_READ) &&
+                   (cyc >= (RL_INT - 1)) &&
+                   (cyc <  (RL_INT + DATA_CK));
+
+    wire dq_window =
+        ((state == S_WRITE) && (cyc >= WL_INT) && (cyc < WL_INT + DATA_CK))
+     || ((state == S_READ)  && (cyc >= RL_INT) && (cyc < RL_INT + DATA_CK));
+
+    assign WDQS_t = wdqs_en ? clk_2x : 1'b0;
+    assign WDQS_c = ~WDQS_t;
+    assign RDQS_t = rdqs_en ? clk_2x : 1'b0;
+    assign RDQS_c = ~RDQS_t;
+
+    //=========================================================
+    // DDR data serialiser (clk_2x domain)
+    //=========================================================
+    reg [DQ_W-1:0] dq_pos, dq_neg;
+    reg             dq_active;
+    reg [2:0]       pair_cnt;
+
+    assign DQ = dq_active ? (clk_2x ? dq_pos : dq_neg)
+                          : {DQ_W{1'b0}};
+
+    always @(posedge clk_2x or negedge rst_n) begin
+        if (!rst_n) begin
+            dq_pos    <= {DQ_W{1'b0}};
+            dq_neg    <= {DQ_W{1'b0}};
+            dq_active <= 1'b0;
+            pair_cnt  <= 3'd0;
+        end
+        else if (dq_window && !dq_active) begin
+            dq_active <= 1'b1;
+            pair_cnt  <= 3'd0;
+            dq_pos    <= burst[0];
+            dq_neg    <= burst[1];
+        end
+        else if (dq_active) begin
+            pair_cnt <= pair_cnt + 1;
+            case (pair_cnt)
+                3'd0: begin dq_pos <= burst[2]; dq_neg <= burst[3]; end
+                3'd1: begin dq_pos <= burst[4]; dq_neg <= burst[5]; end
+                3'd2: begin dq_pos <= burst[6]; dq_neg <= burst[7]; end
+                3'd3: begin
+                    dq_pos    <= {DQ_W{1'b0}};
+                    dq_neg    <= {DQ_W{1'b0}};
+                    dq_active <= 1'b0;
+                    pair_cnt  <= 3'd0;
+                end
+                default: begin dq_active <= 1'b0; pair_cnt <= 3'd0; end
+            endcase
+        end
+    end
+
+    //=========================================================
+    // rd_valid — 1 CK pulse after read burst
+    //=========================================================
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            rd_valid <= 1'b0;
+        else
+            rd_valid <= (state == S_READ) && (cyc == RL_INT + DATA_CK - 1);
+    end
+
+    //=========================================================
+    // State register + counter + recovery timers
+    //=========================================================
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state   <= S_IDLE;
+            cyc     <= 6'd0;
+            wtr_cnt <= 6'd0;
+            wr_cnt  <= 6'd0;
+            rtp_cnt <= 6'd0;
+        end else begin
+            state <= nxt;
+            cyc   <= (nxt != state) ? 6'd0 : cyc + 1;
+
+            // ---- Decrement recovery timers ----
+            if (wtr_cnt > 0) wtr_cnt <= wtr_cnt - 1;
+            if (wr_cnt  > 0) wr_cnt  <= wr_cnt  - 1;
+            if (rtp_cnt > 0) rtp_cnt <= rtp_cnt - 1;
+
+            // ---- Load on transition (last-write wins over decrement) ----
+            if (state == S_WRITE && nxt == S_ACTIVE) begin
+                wtr_cnt <= tWTR;
+                wr_cnt  <= tWR;
+            end
+            if (state == S_READ && nxt == S_ACTIVE) begin
+                rtp_cnt <= (tRTP > (RL + DATA_CK))
+                         ? (tRTP - RL - DATA_CK) : 6'd0;
+            end
+        end
+    end
+
+    //=========================================================
+    // Next-state logic
+    //=========================================================
+    always @(*) begin
+        case (state)
+            S_IDLE:   nxt = (cmd_act_dec)                ? S_ACT    : S_IDLE;
+            S_ACT:    nxt = (cyc == tRCD - 2)            ? S_ACTIVE : S_ACT;
+            S_ACTIVE: begin
+                if      (cmd_wr_dec  && wr_ready)  nxt = S_WRITE;
+                else if (cmd_rd_dec  && rd_ready)  nxt = S_READ;
+                else if (cmd_pre_dec && pre_ready) nxt = S_PRE;
+                else                               nxt = S_ACTIVE;
+            end
+            S_WRITE:  nxt = (cyc == WL_INT + DATA_CK)   ? S_ACTIVE : S_WRITE;
+            S_READ:   nxt = (cyc == RL_INT + DATA_CK)   ? S_ACTIVE : S_READ;
+            S_PRE:    nxt = (cyc == tRP - 2)             ? S_IDLE   : S_PRE;
+            default:  nxt = S_IDLE;
+        endcase
+    end
+
+endmodule

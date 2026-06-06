@@ -1,0 +1,60 @@
+m255
+K4
+z2
+13
+!s112 1.1
+!i10d 8192
+!i10e 25
+!i10f 100
+cModel Technology
+Z0 dD:/hbm4/simulation/modelsim
+vhbm4_bank_model
+Z1 DXx6 sv_std 3 std 0 22 AD7iAPLo6nTIKk<N0eo=D3
+Z2 !s110 1775570066
+!i10b 1
+!s100 0<b3z[dF7;8NEN>IMUCE41
+IGKXakzOkVR]6OlCd:_E:f3
+Z3 VDg1SIo80bB@j0V0VzS_@n1
+!s105 hbm4_bank_model_sv_unit
+S1
+R0
+Z4 w1775314021
+8D:/hbm4/hbm4_bank_model.sv
+FD:/hbm4/hbm4_bank_model.sv
+L0 21
+Z5 OV;L;10.5b;63
+r1
+!s85 0
+31
+Z6 !s108 1775570066.000000
+!s107 D:/hbm4/hbm4_bank_model.sv|
+!s90 -reportprogress|300|-sv|-work|work|+incdir+D:/hbm4|D:/hbm4/hbm4_bank_model.sv|
+!i113 1
+Z7 o-sv -work work
+Z8 !s92 -sv -work work +incdir+D:/hbm4
+Z9 tCvgOpt 0
+vhbm4_bank_model_tb
+R1
+R2
+!i10b 1
+!s100 ]PcANOCN?`gBRZz57^jk21
+ICNFbiF7L2SmndE=Ih;Dkj0
+R3
+!s105 hbm4_bank_model_tb_sv_unit
+S1
+R0
+R4
+8D:/hbm4/hbm4_bank_model_tb.sv
+FD:/hbm4/hbm4_bank_model_tb.sv
+L0 9
+R5
+r1
+!s85 0
+31
+R6
+!s107 D:/hbm4/hbm4_bank_model_tb.sv|
+!s90 -reportprogress|300|-sv|-work|work|+incdir+D:/hbm4|D:/hbm4/hbm4_bank_model_tb.sv|
+!i113 1
+R7
+R8
+R9
